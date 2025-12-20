@@ -1,0 +1,33 @@
+{
+  "eval_session_id": "9ac59595-8d93-48ba-b3df-b670097dca1b",
+  "metrics": {
+    "SSIM": 0.701741610909113,
+    "PSNR": 24.78505402811947,
+    "MSE": 0.013743143528699875,
+    "MAE": 0.0742688775062561,
+    "Lung_Dice": 0.9062003784568966,
+    "Soft_Tissue_Dice": 0.8672003657540861
+  },
+  "interpretation": {
+    "SSIM_Quality": "Fair",
+    "PSNR_Quality": "Fair",
+    "Medical_Quality": "Excellent",
+    "Average_Dice": "0.8867"
+  },
+  "visualizations": {
+    "gt_gifs": {
+      "axial": "visualizations/gt_axial.gif",
+      "sagittal": "visualizations/gt_sagittal.gif",
+      "coronal": "visualizations/gt_coronal.gif"
+    },
+    "pred_gifs": {
+      "axial": "visualizations/pred_axial.gif",
+      "sagittal": "visualizations/pred_sagittal.gif",
+      "coronal": "visualizations/pred_coronal.gif"
+    },
+    "comparison_image": "visualizations/comparison.png",
+    "output_dir": "uploads/evaluations/9ac59595-8d93-48ba-b3df-b670097dca1b/results/visualizations"
+  },
+  "readme_content": "# \u0110\u00e1nh Gi\u00e1 Model X-ray2CTPA\n\n## K\u1ebft Qu\u1ea3 \u0110\u00e1nh Gi\u00e1\n\n### \ud83d\udcca Ch\u1ec9 S\u1ed1 Ch\u1ea5t L\u01b0\u1ee3ng H\u00ecnh \u1ea2nh\n\n- **SSIM**: 0.7017 (**Kh\u00e1**)\n- **PSNR**: 24.79 dB (**Kh\u00e1**)\n\n### \ud83d\udcc8 Nh\u1eadn X\u00e9t v\u00e0 \u0110\u00e1nh Gi\u00e1\n\n#### SSIM (Structural Similarity Index)\n- **Gi\u00e1 tr\u1ecb**: 0.7017/1.0\n- **\u00dd ngh\u0129a**: \u0110o \u0111\u1ed9 t\u01b0\u01a1ng \u0111\u1ed3ng v\u1ec1 c\u1ea5u tr\u00fac h\u00ecnh \u1ea3nh\n- **\u0110\u00e1nh gi\u00e1**: \u0110\u1ea1t m\u1ee9c **Kh\u00e1**. Model c\u00f3 kh\u1ea3 n\u0103ng t\u00e1i t\u1ea1o c\u1ea5u tr\u00fac gi\u1ea3i ph\u1eabu m\u1ed9t c\u00e1ch ch\u00ednh x\u00e1c.\n\n#### PSNR (Peak Signal-to-Noise Ratio)  \n- **Gi\u00e1 tr\u1ecb**: 24.79 dB\n- **\u00dd ngh\u0129a**: \u0110o t\u1ef7 l\u1ec7 t\u00edn hi\u1ec7u tr\u00ean nhi\u1ec5u, c\u00e0ng cao c\u00e0ng t\u1ed1t\n- **\u0110\u00e1nh gi\u00e1**: \u0110\u1ea1t m\u1ee9c **Kh\u00e1**. Ch\u1ea5t l\u01b0\u1ee3ng h\u00ecnh \u1ea3nh sinh ra t\u01b0\u01a1ng \u0111\u1ed1i s\u00e1t v\u1edbi ground truth.\n\n## \ud83c\udfa5 So S\u00e1nh Tr\u1ef1c Quan\n\n### CT Axial View (C\u1eaft Ngang)\n\n| Ground Truth | Prediction |\n|:------------:|:----------:|\n| ![GT Axial](visualizations/gt_axial.gif) | ![Pred Axial](visualizations/pred_axial.gif) |\n\n### CT Sagittal View (C\u1eaft D\u1ecdc) \n\n| Ground Truth | Prediction |\n|:------------:|:----------:|\n| ![GT Sagittal](visualizations/gt_sagittal.gif) | ![Pred Sagittal](visualizations/pred_sagittal.gif) |\n\n### CT Coronal View (C\u1eaft Tr\u01b0\u1edbc-Sau)\n\n| Ground Truth | Prediction |\n|:------------:|:----------:|\n| ![GT Coronal](visualizations/gt_coronal.gif) | ![Pred Coronal](visualizations/pred_coronal.gif) |\n\n### So S\u00e1nh T\u1ed5ng H\u1ee3p\n\n![Comparison](visualizations/comparison.png)\n\n\n\n## \ud83c\udfe5 Ch\u1ec9 S\u1ed1 Y T\u1ebf\n\n- **Lung Dice**: 0.9062 (Xu\u1ea5t s\u1eafc)\n- **Soft Tissue Dice**: 0.8672 (Xu\u1ea5t s\u1eafc)\n- **Ch\u1ea5t l\u01b0\u1ee3ng Y t\u1ebf**: **Xu\u1ea5t s\u1eafc** (Dice TB: 0.8867)\n\n## \ud83d\udd0d K\u1ebft Lu\u1eadn\n\nModel X-ray2CTPA cho k\u1ebft qu\u1ea3 **kh\u00e1** v\u1edbi:\n\n- \u2705 **C\u1ea5u tr\u00fac gi\u1ea3i ph\u1eabu** \u0111\u01b0\u1ee3c t\u00e1i t\u1ea1o ch\u00ednh x\u00e1c (SSIM 0.702)\n- \u2705 **Ch\u1ea5t l\u01b0\u1ee3ng h\u00ecnh \u1ea3nh** \u1edf m\u1ee9c kh\u00e1 (PSNR 24.8 dB)\n- \u2705 **\u0110\u1ed9 ch\u00ednh x\u00e1c y t\u1ebf** xu\u1ea5t s\u1eafc (Dice TB: 0.8867)\n\n### Thang \u0110\u00e1nh Gi\u00e1\n\n| Ch\u1ec9 s\u1ed1 | Xu\u1ea5t s\u1eafc | T\u1ed1t | Kh\u00e1 | K\u00e9m |\n|--------|----------|-----|-----|-----|\n| **SSIM** | \u2265 0.9 | \u2265 0.8 | \u2265 0.6 | < 0.6 |\n| **PSNR** | \u2265 30 dB | \u2265 25 dB | \u2265 20 dB | < 20 dB |\n| **Dice** | \u2265 0.8 | \u2265 0.6 | \u2265 0.4 | < 0.4 |\n\n## \ud83d\ude80 C\u00e1ch S\u1eed D\u1ee5ng\n\nCh\u1ea1y \u0111\u00e1nh gi\u00e1 v\u1edbi visualization:\n\n```bash\npython simple_evaluation_with_viz.py \\\n  --gt-file \"/path/to/ground_truth.npy\" \\\n  --pred-file \"/path/to/prediction.npy\" \\\n  --create-readme --create-viz \\\n  --output results.json\n```\n\n## \ud83d\udcca Chi Ti\u1ebft K\u1ef9 Thu\u1eadt\n\n- **MSE**: 0.013743\n- **MAE**: 0.074269\n- **Orientation**: \u0110\u00e3 s\u1eeda l\u1ed7i alignment v\u1edbi transpose(1,2,0)\n- **Format**: T\u01b0\u01a1ng th\u00edch v\u1edbi LIDC training pipeline\n- **Visualizations**: uploads/evaluations/9ac59595-8d93-48ba-b3df-b670097dca1b/results/visualizations\n\n---\n*K\u1ebft qu\u1ea3 \u0111\u01b0\u1ee3c t\u1ea1o t\u1ef1 \u0111\u1ed9ng t\u1eeb simple_evaluation_with_viz.py*\n",
+  "created_at": "2025-07-14T01:46:52.795110"
+}
