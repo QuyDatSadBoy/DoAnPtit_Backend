@@ -1,0 +1,7 @@
+checkpoints/
+.vscode/
+*.gif
+*.png
+*.log
+*.csv
+*.json

@@ -1,0 +1,68 @@
+# VQ-GAN/VAE Configuration
+vqgan_ckpt: null 
+vae_ckpt: 'stabilityai/sd-vae-ft-mse-original'
+
+# ==================== SHAPE CONFIGURATION ====================
+# Các tham số này quyết định shape của CT output
+# Current shape: (128, 32, 32) - (Depth, Height, Width)
+
+# Spatial dimensions (H, W) - Kích thước của mỗi slice
+diffusion_img_size: 32        # Thay đổi thành 64, 128, 256 để tăng resolution
+
+# Temporal/Depth dimension (D) - Số lượng slices
+diffusion_depth_size: 128     # Thay đổi thành 64, 256, 512 để tăng/giảm số slices
+
+# Number of channels in latent space
+diffusion_num_channels: 4     # Thường giữ nguyên 4 cho VAE
+
+# ==================== SHAPE EXAMPLES ====================
+# Để có shape khác nhau, thay đổi các giá trị trên:
+#
+# Low resolution, fewer slices:
+# diffusion_img_size: 16, diffusion_depth_size: 64  → (64, 16, 16)
+#
+# Medium resolution:
+# diffusion_img_size: 64, diffusion_depth_size: 128 → (128, 64, 64)
+#
+# High resolution:
+# diffusion_img_size: 128, diffusion_depth_size: 256 → (256, 128, 128)
+#
+# Very high resolution (cần GPU mạnh):
+# diffusion_img_size: 256, diffusion_depth_size: 512 → (512, 256, 256)
+
+# ==================== OTHER PARAMETERS ====================
+dim_mults: [1,2,4,8]          # Tăng thêm [1,2,4,8,16] nếu dùng resolution cao
+results_folder: "./checkpoints/ddpm/"
+results_folder_postfix: ''
+load_milestone: False
+cond_dim: 512 
+
+# ==================== TRAINING PARAMETERS ====================
+batch_size: 2                 # Giảm nếu tăng resolution
+num_workers: 1
+logger: wandb
+objective: pred_x0
+save_and_sample_every: 200
+denoising_fn: Unet3D
+train_lr: 5e-6
+timesteps: 1000 
+sampling_timesteps: 500 
+loss_type: l1
+train_num_steps: 60000000 
+gradient_accumulate_every: 8
+ema_decay: 0.999
+amp: True 
+num_sample_rows: 1
+max_grad_norm: 0.1
+gpus: 0
+l1_weight: 1.0
+perceptual_weight: 0.0
+discriminator_weight: 0.0 
+classification_weight: 0.0
+classifier_free_guidance: False
+lora: True
+lora_first: False
+medclip: True
+name_dataset: LIDC 
+dataset_min_value: -1024 
+dataset_max_value: 3071

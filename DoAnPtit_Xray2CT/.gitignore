@@ -1,0 +1,8 @@
+# Data directories
+data/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
