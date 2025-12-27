@@ -78,7 +78,7 @@ EOF
 ```bash
 cd DoAnPtit_Backend
 source venv/bin/activate
-uvicorn app.main:application --host 0.0.0.0 --port 8000 --reload
+uvicorn app.main:application --host 0.0.0.0 --port 8999 --reload
 ```
 
 ### Terminal 2 - Celery Worker (cho inference)
@@ -90,10 +90,14 @@ source venv/bin/activate
 conda activate Xray2CT
 
 # Chạy Celery worker
-celery -A app.worker.celery_app worker --loglevel=info --pool=solo
+celery -A app.worker.celery_app worker -Q inference --loglevel=info --pool=solo
 ```
 
 ## 4. Cài đặt Frontend
+
+```bash
+npm run build
+npx serve -s build -l 3000
 
 ```bash
 cd DoAnPtit_FrontEnd

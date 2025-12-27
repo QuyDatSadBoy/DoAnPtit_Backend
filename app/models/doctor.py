@@ -2,11 +2,11 @@
 Doctor Model
 """
 import uuid
-from datetime import datetime
 from sqlalchemy import Column, String, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db.session import Base
+from app.core.timezone import now_vn
 
 
 class Doctor(Base):
@@ -17,8 +17,8 @@ class Doctor(Base):
     specialty = Column(String(255))
     phone = Column(String(50))
     hospital = Column(String(255))
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=now_vn, nullable=False)
+    updated_at = Column(DateTime, default=now_vn, onupdate=now_vn, nullable=False)
     
     # Relationships
     user = relationship("User", back_populates="doctor")

@@ -2,11 +2,12 @@
 Patient Model
 """
 import uuid
-from datetime import datetime, date
+from datetime import date
 from sqlalchemy import Column, String, DateTime, Date, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.db.session import Base
+from app.core.timezone import now_vn
 
 
 class Patient(Base):
@@ -20,8 +21,8 @@ class Patient(Base):
     address = Column(Text)
     email = Column(String(255))
     id_number = Column(String(50), unique=True, index=True)  # CCCD/CMND
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=now_vn, nullable=False)
+    updated_at = Column(DateTime, default=now_vn, onupdate=now_vn, nullable=False)
     
     # Relationships
     medical_records = relationship("MedicalRecord", back_populates="patient", order_by="desc(MedicalRecord.visit_date)")

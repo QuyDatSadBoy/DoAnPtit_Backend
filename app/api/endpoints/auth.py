@@ -54,7 +54,12 @@ async def login(
             username=user.username,
             email=user.email,
             role=user.role,
-            full_name=user.full_name
+            full_name=user.full_name,
+            avatar=user.avatar,
+            phone=user.phone,
+            is_active=user.is_active,
+            created_at=user.created_at,
+            face_registered=user.face_registered
         )
     )
 
@@ -91,7 +96,12 @@ async def login_json(
             username=user.username,
             email=user.email,
             role=user.role,
-            full_name=user.full_name
+            full_name=user.full_name,
+            avatar=user.avatar,
+            phone=user.phone,
+            is_active=user.is_active,
+            created_at=user.created_at,
+            face_registered=user.face_registered
         )
     )
 
@@ -136,7 +146,11 @@ async def register(
 ):
     """Register new user account"""
     import uuid
+    import json
+    import os
+    import httpx
     from app.models.doctor import Doctor
+    from app.core.config import get_face_images_dir
     
     # Check if username exists
     existing_user = db.query(User).filter(User.username == user_data.get("username")).first()
@@ -182,7 +196,77 @@ async def register(
     
     db.commit()
     
-    return {"message": "Registration successful", "user_id": str(user_id)}
+    # Handle face registration if face_images provided
+    face_images = user_data.get("face_images")
+    face_registered = False
+    
+    if face_images and len(face_images) >= 3:
+        try:
+            # Call face registration endpoint internally
+            from app.api.endpoints.face_recognition import (
+                decode_base64_image, 
+                detect_and_crop_face, 
+                get_face_encoding,
+                FACE_RECOGNITION_AVAILABLE
+            )
+            import cv2
+            import numpy as np
+            from app.core.timezone import now_vn
+            
+            if FACE_RECOGNITION_AVAILABLE:
+                FACE_IMAGES_DIR = str(get_face_images_dir())
+                user_face_folder = os.path.join(FACE_IMAGES_DIR, str(user_id))
+                os.makedirs(user_face_folder, exist_ok=True)
+                
+                saved_count = 0
+                all_encodings = []
+                
+                for i, base64_image in enumerate(face_images):
+                    try:
+                        image = decode_base64_image(base64_image)
+                        success, face_locations, cropped_faces = detect_and_crop_face(image)
+                        
+                        if not success or len(face_locations) != 1:
+                            continue
+                        
+                        encoding = get_face_encoding(image)
+                        if encoding is None:
+                            continue
+                        
+                        all_encodings.append(encoding.tolist())
+                        
+                        face_image = cropped_faces[0]
+                        face_path = os.path.join(user_face_folder, f"face_{i+1}.jpg")
+                        face_bgr = cv2.cvtColor(face_image, cv2.COLOR_RGB2BGR)
+                        cv2.imwrite(face_path, face_bgr)
+                        
+                        saved_count += 1
+                    except Exception as e:
+                        print(f"Error processing face image {i}: {e}")
+                        continue
+                
+                if saved_count > 0 and all_encodings:
+                    avg_encoding = np.mean(all_encodings, axis=0).tolist()
+                    
+                    # Update user with face data
+                    user.face_images_folder = user_face_folder
+                    user.face_encoding = json.dumps({
+                        "average": avg_encoding,
+                        "all": all_encodings
+                    })
+                    user.face_registered = True
+                    user.face_registered_at = now_vn()
+                    db.commit()
+                    face_registered = True
+        except Exception as e:
+            print(f"Error registering face during signup: {e}")
+            # Don't fail the registration, just skip face registration
+    
+    return {
+        "message": "Registration successful", 
+        "user_id": str(user_id),
+        "face_registered": face_registered
+    }
 
 
 @router.get("/me", response_model=UserResponse)

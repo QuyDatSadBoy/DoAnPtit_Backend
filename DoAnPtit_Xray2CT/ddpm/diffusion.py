@@ -1,5 +1,6 @@
 "Largely taken and adapted from https://github.com/lucidrains/video-diffusion-pytorch"
 
+import os
 import math
 import copy
 import torch
@@ -810,7 +811,11 @@ class GaussianDiffusion(nn.Module):
             sample_duration=64)
 
         self.classifier = self.classifier.cuda()
-        classifier_path = "./pretrained_models/classification_model_256.pth.tar"
+        # FIX: Use absolute path relative to this file's location
+        # This fixes the issue when running from Celery worker with different CWD
+        _current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        _project_root = os.path.dirname(_current_file_dir)  # Go up from ddpm/ to DoAnPtit_Xray2CT/
+        classifier_path = os.path.join(_project_root, "pretrained_models", "classification_model_256.pth.tar")
         pretrained = torch.load(classifier_path, weights_only=False)
 
         self.classifier.load_state_dict(pretrained, strict=False)

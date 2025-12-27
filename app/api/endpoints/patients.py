@@ -19,7 +19,7 @@ from app.core.security import require_doctor
 router = APIRouter()
 
 
-@router.get("/", response_model=PatientListResponse)
+@router.get("", response_model=PatientListResponse)
 async def get_patients(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
@@ -54,7 +54,7 @@ async def get_patients(
     )
 
 
-@router.post("/", response_model=PatientResponse)
+@router.post("", response_model=PatientResponse)
 async def create_patient(
     patient_data: PatientCreate,
     db: Session = Depends(get_db),

@@ -1,7 +1,142 @@
-checkpoints/
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# =========================
+# Virtual Environment
+# =========================
+venv/
+env/
+.env
+.venv/
+ENV/
+
+# =========================
+# IDE / Editor
+# =========================
 .vscode/
-*.gif
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# =========================
+# Images & Media
+# =========================
 *.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.ico
+*.tiff
+*.webp
+*.svg
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.mp3
+*.wav
+*.dcm
+*.nii
+*.nii.gz
+
+# =========================
+# Logs & Cache
+# =========================
 *.log
+logs/
+*.cache
+.cache/
+*.tmp
+*.temp
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# =========================
+# Data Files
+# =========================
 *.csv
 *.json
+!package.json
+!package-lock.json
+*.xml
+*.sql
+*.db
+*.sqlite3
+
+# =========================
+# Model & Checkpoints
+# =========================
+checkpoints/
+*.pth
+*.pt
+*.h5
+*.ckpt
+*.safetensors
+*.bin
+models/
+weights/
+
+# =========================
+# Upload & Output Folders
+# =========================
+uploads/
+static/uploads/
+results/
+outputs/
+face_images/
+temp/
+
+# =========================
+# Jupyter Notebook
+# =========================
+.ipynb_checkpoints/
+*.ipynb
+
+# =========================
+# OS Generated
+# =========================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# =========================
+# Secrets & Config
+# =========================
+*.pem
+*.key
+secrets/
+config.local.py

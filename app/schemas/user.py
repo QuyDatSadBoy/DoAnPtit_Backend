@@ -11,6 +11,7 @@ class UserBase(BaseModel):
     username: str
     email: EmailStr
     full_name: Optional[str] = None
+    phone: Optional[str] = None
     role: str = "doctor"
 
 
@@ -21,11 +22,26 @@ class UserCreate(UserBase):
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     full_name: Optional[str] = None
+    phone: Optional[str] = None
     is_active: Optional[bool] = None
+
+
+class ProfileUpdate(BaseModel):
+    """Schema for updating user profile (self-update)"""
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    phone: Optional[str] = None
+
+
+class PasswordChange(BaseModel):
+    """Schema for changing password"""
+    current_password: str
+    new_password: str
 
 
 class UserResponse(UserBase):
     id: UUID
+    avatar: Optional[str] = None
     is_active: bool
     created_at: datetime
     updated_at: datetime

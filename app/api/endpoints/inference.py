@@ -4,7 +4,6 @@ Inference Endpoints - X-ray to CT conversion
 import os
 import uuid
 import shutil
-from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from sqlalchemy.orm import Session
@@ -15,16 +14,23 @@ from app.models.user import User
 from app.models.medical_record import MedicalRecord
 from app.schemas.inference import InferenceResponse, InferenceStatusResponse
 from app.core.security import require_doctor
-from app.core.config import settings
+from app.core.config import settings, get_base_dir, get_patient_files_dir
+from app.core.timezone import now_vn
 
 router = APIRouter()
 
 
 def get_patient_folder(patient_id: str, record_id: str) -> str:
-    """Get folder path for patient files"""
-    base_path = os.path.join(settings.PATIENT_FILES_DIR, str(patient_id), str(record_id))
-    os.makedirs(base_path, exist_ok=True)
-    return base_path
+    """Get ABSOLUTE folder path for patient files (for file operations)"""
+    # Use get_patient_files_dir() to ensure absolute path
+    base_path = get_patient_files_dir() / str(patient_id) / str(record_id)
+    base_path.mkdir(parents=True, exist_ok=True)
+    return str(base_path)
+
+
+def get_relative_path(patient_id: str, record_id: str, filename: str) -> str:
+    """Get RELATIVE path for storing in database (for serving via static files)"""
+    return f"{settings.PATIENT_FILES_DIR}/{patient_id}/{record_id}/{filename}"
 
 
 @router.post("/upload", response_model=InferenceResponse)
@@ -59,6 +65,13 @@ async def upload_xray_for_inference(
             detail="Medical record not found"
         )
     
+    # Check permission: Only record creator or admin can upload X-ray
+    if current_user.role != 'admin' and record.created_by != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền tải ảnh X-ray lên hồ sơ này. Chỉ bác sĩ tạo hồ sơ hoặc admin mới được phép."
+        )
+    
     # Generate inference ID
     inference_id = str(uuid.uuid4())
     
@@ -67,35 +80,37 @@ async def upload_xray_for_inference(
     
     # Save X-ray file
     xray_filename = f"xray_{inference_id}{file_ext}"
-    xray_path = os.path.join(folder_path, xray_filename)
+    xray_full_path = os.path.join(folder_path, xray_filename)
+    xray_relative_path = get_relative_path(str(record.patient_id), str(record.id), xray_filename)
     
-    with open(xray_path, "wb") as f:
+    with open(xray_full_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
     
-    # Update medical record with inference history
+    # Update medical record with inference history (store RELATIVE paths)
     if record.infer_history is None:
         record.infer_history = []
     
     record.infer_history = record.infer_history + [{
         "id": inference_id,
-        "xray_path": xray_path,
+        "xray_path": xray_relative_path,  # Store relative path for static serving
         "ct_path": None,
         "status": "pending",
         "guidance_scale": guidance_scale,
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": now_vn().isoformat(),
         "completed_at": None
     }]
     
     db.commit()
     
-    # Queue the inference task with Celery
+    # Queue the inference task with Celery (pass ABSOLUTE path for file operations)
     try:
         from app.worker.tasks import process_inference
         process_inference.delay(
             inference_id=inference_id,
             medical_record_id=medical_record_id,
             patient_id=str(record.patient_id),
-            xray_path=xray_path,
+            user_id=str(current_user.id),  # For targeted Socket.IO notification
+            xray_path=xray_full_path,  # Pass absolute path to worker
             guidance_scale=guidance_scale
         )
     except Exception as e:

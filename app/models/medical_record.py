@@ -2,11 +2,12 @@
 Medical Record Model
 """
 import uuid
-from datetime import datetime, date
+from datetime import date
 from sqlalchemy import Column, String, DateTime, Date, Text, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.db.session import Base
+from app.core.timezone import now_vn
 
 
 class MedicalRecord(Base):
@@ -26,8 +27,8 @@ class MedicalRecord(Base):
     # Format: [{"id": "uuid", "xray_path": "...", "ct_path": "...", "status": "pending|processing|completed|failed", "created_at": "..."}]
     infer_history = Column(JSONB, default=list, nullable=False)
     
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=now_vn, nullable=False)
+    updated_at = Column(DateTime, default=now_vn, onupdate=now_vn, nullable=False)
     
     # Relationships
     patient = relationship("Patient", back_populates="medical_records")
@@ -47,7 +48,7 @@ class MedicalRecord(Base):
             "xray_path": xray_path,
             "ct_path": None,
             "status": "pending",
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": now_vn().isoformat(),
             "completed_at": None
         })
     
@@ -60,5 +61,5 @@ class MedicalRecord(Base):
                     if ct_path:
                         item["ct_path"] = ct_path
                     if status == "completed":
-                        item["completed_at"] = datetime.utcnow().isoformat()
+                        item["completed_at"] = now_vn().isoformat()
                     break

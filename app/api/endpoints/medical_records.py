@@ -1,10 +1,12 @@
 """
 Medical Record Endpoints
 """
+import os
 import uuid
 from typing import Optional, List
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session, joinedload
 
 from app.db.session import get_db
@@ -17,6 +19,7 @@ from app.schemas.medical_record import (
     MedicalRecordResponse, MedicalRecordListResponse
 )
 from app.core.security import require_doctor, get_current_user
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -32,7 +35,7 @@ def get_doctor_id(current_user: User, db: Session) -> uuid.UUID:
     return doctor.id
 
 
-@router.get("/", response_model=MedicalRecordListResponse)
+@router.get("", response_model=MedicalRecordListResponse)
 async def get_medical_records(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
@@ -82,7 +85,7 @@ async def get_medical_records(
     )
 
 
-@router.post("/", response_model=MedicalRecordResponse)
+@router.post("", response_model=MedicalRecordResponse)
 async def create_medical_record(
     record_data: MedicalRecordCreate,
     db: Session = Depends(get_db),
@@ -213,15 +216,24 @@ async def update_medical_record(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_doctor)
 ):
-    """Update medical record"""
+    """Update medical record - only creator can edit"""
     record = db.query(MedicalRecord).options(
-        joinedload(MedicalRecord.patient)
+        joinedload(MedicalRecord.patient),
+        joinedload(MedicalRecord.doctor).joinedload(Doctor.user)
     ).filter(MedicalRecord.id == record_id).first()
     
     if not record:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Medical record not found"
+        )
+    
+    # Check ownership - only the doctor who created this record can edit
+    # Admin can also edit
+    if current_user.role != "admin" and record.created_by != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền sửa hồ sơ này. Chỉ bác sĩ tạo hồ sơ mới được sửa."
         )
     
     # Update fields
@@ -247,7 +259,8 @@ async def update_medical_record(
         infer_history=record.infer_history or [],
         created_at=record.created_at,
         updated_at=record.updated_at,
-        patient_name=record.patient.full_name if record.patient else None
+        patient_name=record.patient.full_name if record.patient else None,
+        doctor_name=record.doctor.user.full_name if record.doctor and record.doctor.user else None
     )
 
 
@@ -257,7 +270,7 @@ async def delete_medical_record(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_doctor)
 ):
-    """Delete medical record"""
+    """Delete medical record - only creator or admin can delete"""
     record = db.query(MedicalRecord).filter(MedicalRecord.id == record_id).first()
     if not record:
         raise HTTPException(
@@ -265,7 +278,54 @@ async def delete_medical_record(
             detail="Medical record not found"
         )
     
+    # Check ownership - only the doctor who created this record or admin can delete
+    if current_user.role != "admin" and record.created_by != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bạn không có quyền xóa hồ sơ này. Chỉ bác sĩ tạo hồ sơ mới được xóa."
+        )
+    
     db.delete(record)
     db.commit()
     
     return {"message": "Medical record deleted successfully"}
+
+
+@router.get("/download/{patient_id}/{record_id}/{filename}")
+async def download_file(
+    patient_id: uuid.UUID,
+    record_id: uuid.UUID,
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_doctor)
+):
+    """Download a file (X-ray image, CT result, etc.) with proper headers for download"""
+    # Construct file path
+    file_path = os.path.join(settings.PATIENT_FILES_DIR, str(patient_id), str(record_id), filename)
+    
+    # Check if file exists
+    if not os.path.exists(file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found"
+        )
+    
+    # Determine media type
+    if filename.endswith('.png'):
+        media_type = "image/png"
+    elif filename.endswith('.jpg') or filename.endswith('.jpeg'):
+        media_type = "image/jpeg"
+    elif filename.endswith('.nii') or filename.endswith('.nii.gz'):
+        media_type = "application/octet-stream"
+    else:
+        media_type = "application/octet-stream"
+    
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )

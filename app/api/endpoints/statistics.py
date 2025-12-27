@@ -18,7 +18,7 @@ from app.core.security import require_doctor, require_admin
 router = APIRouter()
 
 
-@router.get("/", response_model=StatisticsResponse)
+@router.get("", response_model=StatisticsResponse)
 async def get_statistics(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_doctor)
@@ -130,34 +130,128 @@ async def get_dashboard_data(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_doctor)
 ):
-    """Get dashboard summary data"""
+    """Get dashboard summary data with role-based statistics"""
     today = date.today()
+    is_admin = current_user.role == "admin"
     
-    # Recent records
-    recent_records = db.query(MedicalRecord).order_by(
-        MedicalRecord.created_at.desc()
-    ).limit(5).all()
+    # Get doctor_id for current user (if doctor)
+    current_doctor_id = None
+    if current_user.role == "doctor" and hasattr(current_user, 'doctor') and current_user.doctor:
+        current_doctor_id = current_user.doctor.id
+    elif current_user.role == "doctor":
+        doctor = db.query(Doctor).filter(Doctor.user_id == current_user.id).first()
+        if doctor:
+            current_doctor_id = doctor.id
     
-    # Recent patients
-    recent_patients = db.query(Patient).order_by(
-        Patient.created_at.desc()
-    ).limit(5).all()
+    # ===== SYSTEM-WIDE STATISTICS (for admins) =====
+    total_patients = db.query(func.count(Patient.id)).scalar() or 0
+    total_records = db.query(func.count(MedicalRecord.id)).scalar() or 0
     
-    # Pending inferences
-    pending = []
+    # Count all inferences from all records
+    total_inferences = 0
+    completed_inferences = 0
     for record in db.query(MedicalRecord).all():
         if record.infer_history:
             for item in record.infer_history:
-                if item.get("status") in ["pending", "processing"]:
-                    pending.append({
-                        "inference_id": item.get("id"),
-                        "record_id": str(record.id),
-                        "patient_id": str(record.patient_id),
-                        "status": item.get("status"),
-                        "created_at": item.get("created_at")
-                    })
+                total_inferences += 1
+                if item.get("status") == "completed":
+                    completed_inferences += 1
+    
+    # ===== DOCTOR-SPECIFIC STATISTICS =====
+    if is_admin:
+        # For admins, "my" stats = all stats
+        my_patients = total_patients
+        my_records = total_records
+        my_inferences = total_inferences
+        my_completed_inferences = completed_inferences
+    elif current_doctor_id:
+        # For doctors, filter by their doctor_id
+        # Count patients that have at least one record from this doctor
+        my_patients = db.query(func.count(func.distinct(MedicalRecord.patient_id))).filter(
+            MedicalRecord.doctor_id == current_doctor_id
+        ).scalar() or 0
+        
+        my_records = db.query(func.count(MedicalRecord.id)).filter(
+            MedicalRecord.doctor_id == current_doctor_id
+        ).scalar() or 0
+        
+        # Count inferences for doctor's records only
+        my_inferences = 0
+        my_completed_inferences = 0
+        for record in db.query(MedicalRecord).filter(MedicalRecord.doctor_id == current_doctor_id).all():
+            if record.infer_history:
+                for item in record.infer_history:
+                    my_inferences += 1
+                    if item.get("status") == "completed":
+                        my_completed_inferences += 1
+    else:
+        my_patients = 0
+        my_records = 0
+        my_inferences = 0
+        my_completed_inferences = 0
+    
+    # Recent records (filtered by role)
+    if is_admin:
+        recent_records = db.query(MedicalRecord).order_by(
+            MedicalRecord.created_at.desc()
+        ).limit(5).all()
+    else:
+        recent_records = db.query(MedicalRecord).filter(
+            MedicalRecord.doctor_id == current_doctor_id
+        ).order_by(
+            MedicalRecord.created_at.desc()
+        ).limit(5).all() if current_doctor_id else []
+    
+    # Recent patients (filtered by role)
+    if is_admin:
+        recent_patients = db.query(Patient).order_by(
+            Patient.created_at.desc()
+        ).limit(5).all()
+    else:
+        # Get patients that have medical records from this doctor
+        patient_ids = db.query(MedicalRecord.patient_id).filter(
+            MedicalRecord.doctor_id == current_doctor_id
+        ).distinct().subquery()
+        
+        recent_patients = db.query(Patient).filter(
+            Patient.id.in_(patient_ids)
+        ).order_by(
+            Patient.created_at.desc()
+        ).limit(5).all() if current_doctor_id else []
+    
+    # Recent inferences (from recent records)
+    recent_inferences = []
+    source_records = recent_records if is_admin else db.query(MedicalRecord).filter(
+        MedicalRecord.doctor_id == current_doctor_id
+    ).order_by(MedicalRecord.created_at.desc()).limit(10).all() if current_doctor_id else []
+    
+    for record in source_records:
+        if record.infer_history:
+            for item in record.infer_history:
+                recent_inferences.append({
+                    "inference_id": item.get("id"),
+                    "record_id": str(record.id),
+                    "patient_id": str(record.patient_id),
+                    "status": item.get("status"),
+                    "created_at": item.get("created_at")
+                })
+    
+    # Sort by created_at and limit
+    recent_inferences.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    recent_inferences = recent_inferences[:10]
     
     return {
+        # System-wide stats
+        "total_patients": total_patients,
+        "total_records": total_records,
+        "total_inferences": total_inferences,
+        "completed_inferences": completed_inferences,
+        # Doctor-specific stats
+        "my_patients": my_patients,
+        "my_records": my_records,
+        "my_inferences": my_inferences,
+        "my_completed_inferences": my_completed_inferences,
+        # Recent data
         "recent_records": [
             {
                 "id": str(r.id),
@@ -175,5 +269,5 @@ async def get_dashboard_data(
             }
             for p in recent_patients
         ],
-        "pending_inferences": pending[:10]
+        "recent_inferences": recent_inferences
     }

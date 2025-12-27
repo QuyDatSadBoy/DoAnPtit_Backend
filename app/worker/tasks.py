@@ -5,14 +5,17 @@ import os
 import sys
 import json
 import uuid
-from datetime import datetime
 from celery import shared_task
 import redis
 
 from app.worker.celery_app import celery_app
-from app.core.config import settings
+from app.core.config import settings, get_base_dir
+from app.core.timezone import now_vn
 from app.db.session import SessionLocal
 from app.models.medical_record import MedicalRecord
+
+# Base directory of the backend project
+BASE_DIR = get_base_dir()
 
 # Redis client for Socket.IO notifications
 redis_client = redis.Redis(
@@ -22,18 +25,10 @@ redis_client = redis.Redis(
 )
 
 
-def send_socket_notification(user_id: str, notification: dict):
-    """Send notification via Redis pub/sub for Socket.IO"""
-    channel = f"notifications:{user_id}"
-    redis_client.publish(channel, json.dumps(notification))
-    
-    # Also store in a list for persistence
-    redis_client.lpush(f"notifications_list:{user_id}", json.dumps(notification))
-    redis_client.ltrim(f"notifications_list:{user_id}", 0, 99)  # Keep last 100
-
-
 def update_inference_status(medical_record_id: str, inference_id: str, status: str, ct_path: str = None, error: str = None):
     """Update inference status in database"""
+    from sqlalchemy.orm.attributes import flag_modified
+    
     db = SessionLocal()
     try:
         record = db.query(MedicalRecord).filter(
@@ -50,11 +45,19 @@ def update_inference_status(medical_record_id: str, inference_id: str, status: s
                     if error:
                         item["error"] = error
                     if status == "completed":
-                        item["completed_at"] = datetime.utcnow().isoformat()
+                        item["completed_at"] = now_vn().isoformat()
+                    if status == "failed":
+                        item["failed_at"] = now_vn().isoformat()
                 new_history.append(item)
             
             record.infer_history = new_history
+            # Force SQLAlchemy to detect JSONB changes
+            flag_modified(record, "infer_history")
             db.commit()
+            print(f"📝 Updated inference {inference_id} status to {status}")
+    except Exception as e:
+        print(f"⚠️ Failed to update inference status: {e}")
+        db.rollback()
     finally:
         db.close()
 
@@ -65,6 +68,7 @@ def process_inference(
     inference_id: str,
     medical_record_id: str,
     patient_id: str,
+    user_id: str,  # User who initiated the inference (for Socket.IO notification)
     xray_path: str,
     guidance_scale: float = 1.0
 ):
@@ -75,16 +79,35 @@ def process_inference(
     print(f"🚀 Starting inference: {inference_id}")
     
     # Update status to processing
-    update_inference_status(medical_record_id, inference_id, "processing")
+    try:
+        update_inference_status(medical_record_id, inference_id, "processing")
+    except Exception as e:
+        print(f"⚠️ Failed to update processing status: {e}")
+    
+    # Setup paths
+    backend_dir = str(BASE_DIR)
+    xray2ct_dir = os.path.join(backend_dir, 'DoAnPtit_Xray2CT')
+    original_cwd = os.getcwd()
     
     try:
-        # Import inference modules
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'DoAnPtit_Xray2CT'))
+        # Verify xray file exists
+        if not os.path.exists(xray_path):
+            raise FileNotFoundError(f"X-ray file not found: {xray_path}")
+        
+        # Add paths for imports
+        if backend_dir not in sys.path:
+            sys.path.insert(0, backend_dir)
+        if xray2ct_dir not in sys.path:
+            sys.path.insert(0, xray2ct_dir)
+        
+        # CRITICAL: Change working directory to DoAnPtit_Xray2CT
+        # This fixes relative path issues in inference.py (e.g., ./pretrained_models/)
+        os.chdir(xray2ct_dir)
+        print(f"📂 Changed working directory to: {xray2ct_dir}")
         
         import torch
         import numpy as np
         from PIL import Image
-        import cv2
         
         # CUDA optimizations
         torch.backends.cudnn.benchmark = True
@@ -118,10 +141,10 @@ def process_inference(
         }
         
         # Load model
-        checkpoint_path = os.path.join(
-            os.path.dirname(__file__), '..', '..',
-            'DoAnPtit_Xray2CT', 'checkpoints', 'model-81.pt'
-        )
+        checkpoint_path = os.path.join(xray2ct_dir, 'checkpoints', 'model-81.pt')
+        
+        if not os.path.exists(checkpoint_path):
+            raise FileNotFoundError(f"Model checkpoint not found: {checkpoint_path}")
         
         inferencer = XrayToCTPAInference(
             model_checkpoint=checkpoint_path,
@@ -157,35 +180,46 @@ def process_inference(
             show_viewer=False
         )
         
-        # CT output path
-        ct_path = os.path.join(output_dir, f"{output_filename}_none_style.nii.gz")
-        ct_gif_path = os.path.join(output_dir, f"{output_filename}_none_style.gif")
+        # Build relative path for database storage
+        path_parts = output_dir.split(os.sep)
+        if 'patient_files' in path_parts:
+            pf_idx = path_parts.index('patient_files')
+            rel_patient_id = path_parts[pf_idx + 1]
+            rel_record_id = path_parts[pf_idx + 2]
+            ct_relative_path = f"patient_files/{rel_patient_id}/{rel_record_id}/{output_filename}_none_style.nii.gz"
+            ct_gif_relative_path = f"patient_files/{rel_patient_id}/{rel_record_id}/{output_filename}_none_style.gif"
+        else:
+            ct_relative_path = os.path.join(output_dir, f"{output_filename}_none_style.nii.gz")
+            ct_gif_relative_path = os.path.join(output_dir, f"{output_filename}_none_style.gif")
         
-        # Update status to completed
-        update_inference_status(medical_record_id, inference_id, "completed", ct_path)
+        # Update status to completed with RELATIVE path
+        update_inference_status(medical_record_id, inference_id, "completed", ct_relative_path)
         
-        # Send notification
-        notification = {
-            "type": "inference_complete",
-            "inference_id": inference_id,
-            "medical_record_id": medical_record_id,
-            "patient_id": patient_id,
-            "status": "completed",
-            "ct_path": ct_path,
-            "ct_gif_path": ct_gif_path,
-            "message": "X-ray to CT conversion completed successfully!",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        
-        # Broadcast to all connected clients
-        redis_client.publish("inference_notifications", json.dumps(notification))
+        # Send success notification
+        try:
+            notification = {
+                "type": "inference_complete",
+                "inference_id": inference_id,
+                "medical_record_id": medical_record_id,
+                "patient_id": patient_id,
+                "user_id": user_id,
+                "status": "completed",
+                "ct_path": ct_relative_path,
+                "ct_gif_path": ct_gif_relative_path,
+                "message": "Tái tạo CT hoàn thành!",
+                "timestamp": now_vn().isoformat()
+            }
+            redis_client.publish("inference_notifications", json.dumps(notification))
+            print(f"📤 Sent success notification for: {inference_id}")
+        except Exception as redis_err:
+            print(f"⚠️ Failed to send notification: {redis_err}")
         
         print(f"✅ Inference completed: {inference_id}")
         
         return {
             "success": True,
             "inference_id": inference_id,
-            "ct_path": ct_path
+            "ct_path": ct_relative_path
         }
         
     except Exception as e:
@@ -193,26 +227,36 @@ def process_inference(
         print(f"❌ Inference failed: {inference_id} - {error_msg}")
         
         # Update status to failed
-        update_inference_status(medical_record_id, inference_id, "failed", error=error_msg)
+        try:
+            update_inference_status(medical_record_id, inference_id, "failed", error=error_msg)
+        except Exception as db_err:
+            print(f"⚠️ Failed to update DB status: {db_err}")
         
         # Send failure notification
-        notification = {
-            "type": "inference_failed",
-            "inference_id": inference_id,
-            "medical_record_id": medical_record_id,
-            "patient_id": patient_id,
-            "status": "failed",
-            "error": error_msg,
-            "message": f"X-ray to CT conversion failed: {error_msg}",
-            "timestamp": datetime.utcnow().isoformat()
-        }
-        redis_client.publish("inference_notifications", json.dumps(notification))
+        try:
+            notification = {
+                "type": "inference_failed",
+                "inference_id": inference_id,
+                "medical_record_id": medical_record_id,
+                "patient_id": patient_id,
+                "user_id": user_id,
+                "status": "failed",
+                "error": error_msg,
+                "message": f"Tái tạo CT thất bại: {error_msg}",
+                "timestamp": now_vn().isoformat()
+            }
+            redis_client.publish("inference_notifications", json.dumps(notification))
+            print(f"📤 Sent failure notification for: {inference_id}")
+        except Exception as redis_err:
+            print(f"⚠️ Failed to send notification: {redis_err}")
         
-        raise
-
-
-@celery_app.task(name="app.worker.tasks.send_notification")
-def send_notification(user_id: str, notification: dict):
-    """Send notification to user via Socket.IO"""
-    send_socket_notification(user_id, notification)
-    return {"success": True}
+        return {
+            "success": False,
+            "inference_id": inference_id,
+            "error": error_msg
+        }
+    
+    finally:
+        # ALWAYS restore original working directory
+        os.chdir(original_cwd)
+        print(f"📂 Restored working directory to: {original_cwd}")

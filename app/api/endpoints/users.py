@@ -2,20 +2,154 @@
 User Management Endpoints
 """
 import uuid
+import os
+import shutil
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.user import User
 from app.models.doctor import Doctor
-from app.schemas.user import UserCreate, UserUpdate, UserResponse, DoctorCreate, DoctorResponse
-from app.core.security import get_password_hash, require_admin, get_current_user
+from app.schemas.user import (
+    UserCreate, UserUpdate, UserResponse, DoctorCreate, DoctorResponse,
+    ProfileUpdate, PasswordChange
+)
+from app.core.security import get_password_hash, verify_password, require_admin, get_current_user
 
 router = APIRouter()
 
+# Avatar upload directory
+AVATAR_DIR = "avatars"
+os.makedirs(AVATAR_DIR, exist_ok=True)
 
-@router.get("/", response_model=List[UserResponse])
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user_profile(
+    current_user: User = Depends(get_current_user)
+):
+    """Get current logged-in user profile"""
+    return current_user
+
+
+@router.put("/me", response_model=UserResponse)
+async def update_current_user_profile(
+    profile_data: ProfileUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Update current user's profile"""
+    if profile_data.email is not None:
+        # Check if email already exists for another user
+        existing = db.query(User).filter(
+            User.email == profile_data.email,
+            User.id != current_user.id
+        ).first()
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email đã được sử dụng"
+            )
+        current_user.email = profile_data.email
+    
+    if profile_data.full_name is not None:
+        current_user.full_name = profile_data.full_name
+    
+    if profile_data.phone is not None:
+        current_user.phone = profile_data.phone
+    
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
+@router.post("/me/avatar", response_model=UserResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload user avatar"""
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Chỉ chấp nhận file ảnh (JPEG, PNG, GIF, WebP)"
+        )
+    
+    # Create user avatar directory
+    user_avatar_dir = os.path.join(AVATAR_DIR, str(current_user.id))
+    os.makedirs(user_avatar_dir, exist_ok=True)
+    
+    # Delete old avatar if exists
+    if current_user.avatar:
+        old_path = current_user.avatar
+        if os.path.exists(old_path):
+            os.remove(old_path)
+    
+    # Generate filename
+    ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    filename = f"avatar_{uuid.uuid4().hex[:8]}.{ext}"
+    filepath = os.path.join(user_avatar_dir, filename)
+    
+    # Save file
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    
+    # Update user avatar path
+    current_user.avatar = filepath
+    db.commit()
+    db.refresh(current_user)
+    
+    return current_user
+
+
+@router.delete("/me/avatar", response_model=UserResponse)
+async def delete_avatar(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Delete user avatar"""
+    if current_user.avatar:
+        if os.path.exists(current_user.avatar):
+            os.remove(current_user.avatar)
+        current_user.avatar = None
+        db.commit()
+        db.refresh(current_user)
+    
+    return current_user
+
+
+@router.post("/me/change-password")
+async def change_password(
+    password_data: PasswordChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Change current user's password"""
+    # Verify current password
+    if not verify_password(password_data.current_password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mật khẩu hiện tại không đúng"
+        )
+    
+    # Validate new password
+    if len(password_data.new_password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mật khẩu mới phải có ít nhất 6 ký tự"
+        )
+    
+    # Update password
+    current_user.password_hash = get_password_hash(password_data.new_password)
+    db.commit()
+    
+    return {"message": "Đổi mật khẩu thành công"}
+
+
+@router.get("", response_model=List[UserResponse])
 async def get_users(
     skip: int = 0,
     limit: int = 100,
@@ -27,7 +161,7 @@ async def get_users(
     return users
 
 
-@router.post("/", response_model=UserResponse)
+@router.post("", response_model=UserResponse)
 async def create_user(
     user_data: UserCreate,
     db: Session = Depends(get_db),

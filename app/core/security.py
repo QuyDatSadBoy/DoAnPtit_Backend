@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 import uuid
 
 from app.core.config import settings
+from app.core.timezone import now_vn
 from app.db.session import get_db
 
 # Password hashing
@@ -37,9 +38,9 @@ def create_access_token(
 ) -> str:
     """Create JWT access token"""
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = now_vn() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = now_vn() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode = {
         "exp": expire,
@@ -57,9 +58,9 @@ def create_refresh_token(
 ) -> str:
     """Create JWT refresh token"""
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = now_vn() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+        expire = now_vn() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     
     to_encode = {
         "exp": expire,

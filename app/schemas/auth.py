@@ -4,6 +4,7 @@ Authentication Schemas
 from pydantic import BaseModel
 from typing import Optional
 from uuid import UUID
+from datetime import datetime
 
 
 class UserInfo(BaseModel):
@@ -12,6 +13,11 @@ class UserInfo(BaseModel):
     email: str
     role: str
     full_name: Optional[str] = None
+    avatar: Optional[str] = None
+    phone: Optional[str] = None
+    is_active: bool = True
+    created_at: Optional[datetime] = None
+    face_registered: bool = False
 
 
 class Token(BaseModel):

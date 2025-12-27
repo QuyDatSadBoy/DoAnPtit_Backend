@@ -23,13 +23,24 @@ celery_app.conf.update(
     task_soft_time_limit=25 * 60,  # 25 minutes soft limit
     worker_prefetch_multiplier=1,  # Process one task at a time for GPU
     worker_concurrency=1,  # Only 1 worker for GPU tasks
+    broker_connection_retry_on_startup=True,  # Fix deprecation warning
+    
+    # Fix RabbitMQ heartbeat timeout for long-running GPU tasks
+    broker_heartbeat=0,  # Disable heartbeat (prevents disconnect during long tasks)
+    broker_pool_limit=1,  # Single connection pool
+    broker_transport_options={
+        'confirm_publish': True,
+    },
+    
+    # Prevent duplicate task execution
+    task_acks_late=True,  # Acknowledge task only after completion
+    task_reject_on_worker_lost=True,  # Reject task if worker dies
+    
+    # Route inference task to dedicated queue
+    task_routes={
+        "app.worker.tasks.process_inference": {"queue": "inference"},
+    },
 )
-
-# Task routes
-celery_app.conf.task_routes = {
-    "app.worker.tasks.process_inference": {"queue": "inference"},
-    "app.worker.tasks.send_notification": {"queue": "notifications"},
-}
 
 if __name__ == "__main__":
     celery_app.start()
