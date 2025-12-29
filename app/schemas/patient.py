@@ -2,9 +2,16 @@
 Patient Schemas
 """
 from datetime import datetime, date
-from typing import Optional, List
-from pydantic import BaseModel, EmailStr
+from typing import Optional, List, Any
+from pydantic import BaseModel, EmailStr, field_validator
 from uuid import UUID
+
+
+def empty_to_none(v: Any) -> Any:
+    """Convert empty string to None"""
+    if v == '' or v == 'null':
+        return None
+    return v
 
 
 class PatientBase(BaseModel):
@@ -15,6 +22,11 @@ class PatientBase(BaseModel):
     address: Optional[str] = None
     email: Optional[EmailStr] = None
     id_number: Optional[str] = None
+    
+    @field_validator('date_of_birth', 'gender', 'phone', 'address', 'email', 'id_number', mode='before')
+    @classmethod
+    def convert_empty_to_none(cls, v):
+        return empty_to_none(v)
 
 
 class PatientCreate(PatientBase):
@@ -28,6 +40,11 @@ class PatientUpdate(BaseModel):
     phone: Optional[str] = None
     address: Optional[str] = None
     email: Optional[EmailStr] = None
+    
+    @field_validator('date_of_birth', 'gender', 'phone', 'address', 'email', mode='before')
+    @classmethod
+    def convert_empty_to_none(cls, v):
+        return empty_to_none(v)
 
 
 class PatientResponse(PatientBase):

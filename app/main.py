@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.core.config import settings, get_base_dir, get_patient_files_dir
+from app.core.config import settings, get_base_dir, get_patient_files_dir, get_face_images_dir
 from app.api.router import api_router
 from app.db.session import init_db
 from app.db.init_db import init_database
@@ -22,10 +22,12 @@ BASE_DIR = get_base_dir()
 STATIC_DIR = BASE_DIR / settings.STATIC_DIR
 PATIENT_FILES_DIR = get_patient_files_dir()
 AVATARS_DIR = BASE_DIR / settings.AVATARS_DIR
+FACE_IMAGES_DIR = get_face_images_dir()
 
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 PATIENT_FILES_DIR.mkdir(parents=True, exist_ok=True)
 AVATARS_DIR.mkdir(parents=True, exist_ok=True)
+FACE_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @asynccontextmanager
@@ -108,6 +110,7 @@ async def root():
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 app.mount("/patient_files", StaticFiles(directory=str(PATIENT_FILES_DIR)), name="patient_files")
 app.mount("/avatars", StaticFiles(directory=str(AVATARS_DIR)), name="avatars")
+app.mount("/face_images", StaticFiles(directory=str(FACE_IMAGES_DIR)), name="face_images")
 
 
 # Socket.IO Integration - giống notification service

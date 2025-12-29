@@ -186,6 +186,154 @@ async def face_recognition_status():
     }
 
 
+@router.get("/my-images")
+async def get_my_face_images(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get registered face images for current user
+    Returns list of face image URLs
+    """
+    if not current_user.face_registered:
+        return {
+            "success": False,
+            "face_registered": False,
+            "images": [],
+            "message": "No face registered"
+        }
+    
+    # Get face images from user's folder
+    user_face_folder = current_user.face_images_folder
+    if not user_face_folder or not os.path.exists(user_face_folder):
+        return {
+            "success": False,
+            "face_registered": True,
+            "images": [],
+            "message": "Face images folder not found"
+        }
+    
+    # List all face images
+    face_images = []
+    for filename in sorted(os.listdir(user_face_folder)):
+        if filename.endswith(('.jpg', '.jpeg', '.png')):
+            # Return relative path for frontend to construct full URL
+            relative_path = f"face_images/{current_user.id}/{filename}"
+            face_images.append(relative_path)
+    
+    return {
+        "success": True,
+        "face_registered": True,
+        "images": face_images,
+        "registered_at": current_user.face_registered_at.isoformat() if current_user.face_registered_at else None,
+        "message": f"Found {len(face_images)} registered face image(s)"
+    }
+
+
+@router.delete("/images/{filename}")
+async def delete_face_image(
+    filename: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a specific face image for current user
+    Recalculates face encodings from remaining images
+    """
+    if not FACE_RECOGNITION_AVAILABLE:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Face recognition is not available"
+        )
+    
+    if not current_user.face_registered:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No face registered"
+        )
+    
+    # Get user's face folder
+    user_face_folder = current_user.face_images_folder
+    if not user_face_folder or not os.path.exists(user_face_folder):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Face images folder not found"
+        )
+    
+    # Validate filename (security - prevent path traversal)
+    if '/' in filename or '\\' in filename or '..' in filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid filename"
+        )
+    
+    # Check if file exists
+    file_path = os.path.join(user_face_folder, filename)
+    if not os.path.exists(file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Face image not found"
+        )
+    
+    try:
+        # Delete the file
+        os.remove(file_path)
+        
+        # Get remaining images
+        remaining_images = [f for f in os.listdir(user_face_folder) 
+                          if f.endswith(('.jpg', '.jpeg', '.png'))]
+        
+        if len(remaining_images) == 0:
+            # No more images - remove face registration
+            current_user.face_registered = False
+            current_user.face_encoding = None
+            current_user.face_registered_at = None
+            db.commit()
+            
+            # Remove empty folder
+            import shutil
+            shutil.rmtree(user_face_folder)
+            
+            return {
+                "success": True,
+                "message": "Face image deleted. Face registration removed (no images remaining)",
+                "face_registered": False,
+                "remaining_images": 0
+            }
+        
+        # Recalculate encodings from remaining images
+        all_encodings = []
+        for img_filename in remaining_images:
+            img_path = os.path.join(user_face_folder, img_filename)
+            image = face_recognition.load_image_file(img_path)
+            encodings = face_recognition.face_encodings(image)
+            if encodings:
+                all_encodings.append(encodings[0].tolist())
+        
+        if all_encodings:
+            # Calculate average encoding
+            import numpy as np
+            avg_encoding = np.mean(all_encodings, axis=0).tolist()
+            
+            current_user.face_encoding = json.dumps({
+                "average": avg_encoding,
+                "all": all_encodings
+            })
+            db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Face image deleted. {len(remaining_images)} image(s) remaining",
+            "face_registered": True,
+            "remaining_images": len(remaining_images)
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete face image: {str(e)}"
+        )
+
+
 @router.post("/detect", response_model=FaceDetectionResponse)
 async def detect_face(request: FaceImageBase64):
     """
@@ -238,7 +386,8 @@ async def register_face(
 ):
     """
     Register face images for current user
-    Expects multiple images for better recognition accuracy
+    Expects 1-3 images for better recognition accuracy
+    Maximum 3 images allowed
     """
     if not FACE_RECOGNITION_AVAILABLE:
         raise HTTPException(
@@ -252,15 +401,23 @@ async def register_face(
             detail="At least 1 image is required for face registration"
         )
     
+    # Limit to maximum 3 images
+    images_to_process = request.images[:3]
+    
     try:
-        # Create user's face images folder
+        # Create user's face images folder (clean existing)
         user_face_folder = os.path.join(FACE_IMAGES_DIR, str(current_user.id))
+        
+        # Remove existing face images if updating
+        if os.path.exists(user_face_folder):
+            import shutil
+            shutil.rmtree(user_face_folder)
         os.makedirs(user_face_folder, exist_ok=True)
         
         saved_count = 0
         all_encodings = []
         
-        for i, base64_image in enumerate(request.images):
+        for i, base64_image in enumerate(images_to_process):
             # Decode image
             image = decode_base64_image(base64_image)
             

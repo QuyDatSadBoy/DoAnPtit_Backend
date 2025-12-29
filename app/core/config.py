@@ -114,6 +114,7 @@ class Settings(BaseSettings):
             "https://tranquydat.com:55555",  # Kong gateway domain HTTPS
             "http://tranquydat.com",  # Domain without port
             "https://tranquydat.com",  # Domain HTTPS without port
+             "http://localhost:5000"
         ]
         # Thêm https và domain nếu không phải localhost
         if self.FRONTEND_HOST not in ["localhost", "127.0.0.1"]:
