@@ -189,6 +189,15 @@ async def register(
                 detail="Email already exists"
             )
         
+        # Validate role - only allow doctor role during self-registration
+        # Admin accounts must be created by existing admins
+        requested_role = user_data.get("role", "doctor")
+        if requested_role != "doctor":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Chỉ được phép đăng ký tài khoản với vai trò Bác sĩ. Liên hệ quản trị viên để tạo tài khoản Admin."
+            )
+        
         # Create user
         user_id = uuid.uuid4()
         user = User(
@@ -196,7 +205,7 @@ async def register(
             username=user_data.get("username"),
             email=user_data.get("email"),
             password_hash=get_password_hash(user_data.get("password")),
-            role=user_data.get("role", "doctor"),
+            role="doctor",  # Always set to doctor for self-registration
             full_name=user_data.get("full_name"),
             is_active=True
         )
@@ -222,13 +231,13 @@ async def register(
         face_images = user_data.get("face_images")
         face_registered = False
         
-        if face_images and len(face_images) >= 3:
+        if face_images and len(face_images) >= 1:
             try:
-                # Call face registration endpoint internally
+                # Call face registration functions (DeepFace version)
                 from app.api.endpoints.face_recognition import (
-                    decode_base64_image, 
-                    detect_and_crop_face, 
-                    get_face_encoding,
+                    decode_base64_to_numpy, 
+                    extract_face_and_embedding,
+                    save_numpy_to_file,
                     FACE_RECOGNITION_AVAILABLE
                 )
                 import cv2
@@ -245,24 +254,28 @@ async def register(
                     
                     for i, base64_image in enumerate(face_images):
                         try:
-                            image = decode_base64_image(base64_image)
-                            success, face_locations, cropped_faces = detect_and_crop_face(image)
+                            # Decode base64 to numpy array
+                            image = decode_base64_to_numpy(base64_image)
                             
-                            if not success or len(face_locations) != 1:
+                            # Extract face and embedding using DeepFace
+                            result = extract_face_and_embedding(image)
+                            
+                            if not result["success"] or not result.get("face_detected"):
+                                logger.warning(f"Face {i}: {result.get('error', 'No face detected')}")
                                 continue
                             
-                            encoding = get_face_encoding(image)
-                            if encoding is None:
+                            if result.get("face_img") is None or result.get("embedding") is None:
+                                logger.warning(f"Face {i}: Missing face_img or embedding")
                                 continue
                             
-                            all_encodings.append(encoding.tolist())
-                            
-                            face_image = cropped_faces[0]
+                            # Save cropped face (key is face_img, not cropped_face)
                             face_path = os.path.join(user_face_folder, f"face_{i+1}.jpg")
-                            face_bgr = cv2.cvtColor(face_image, cv2.COLOR_RGB2BGR)
-                            cv2.imwrite(face_path, face_bgr)
+                            save_numpy_to_file(result["face_img"], face_path)
                             
+                            # Store embedding
+                            all_encodings.append(result["embedding"])
                             saved_count += 1
+                            
                         except Exception as e:
                             logger.error(f"Error processing face image {i}: {e}")
                             continue
@@ -280,6 +293,7 @@ async def register(
                         user.face_registered_at = now_vn()
                         db.commit()
                         face_registered = True
+                        logger.info(f"Successfully registered {saved_count} faces for user {user_id}")
             except Exception as e:
                 logger.error(f"Error registering face during signup: {e}")
                 # Don't fail the registration, just skip face registration

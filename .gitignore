@@ -110,11 +110,22 @@ weights/
 # Upload & Output Folders
 # =========================
 uploads/
-static/uploads/
+static/
 results/
 outputs/
 face_images/
 temp/
+avatars/
+patient_files/
+x-ray input/
+
+# Keep directory structure but ignore contents
+!static/.gitkeep
+!uploads/.gitkeep
+!results/.gitkeep
+!face_images/.gitkeep
+!avatars/.gitkeep
+!patient_files/.gitkeep
 
 # =========================
 # Jupyter Notebook
